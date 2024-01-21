@@ -28,6 +28,17 @@ void PinStatusLed(uint8_t leds) {
     digitalWrite(LED_BLUE, LOW);
 }
 
+uint8_t PinReadButFlank(void) {
+  static uint8_t prevKey = 0;
+  uint8_t retValue, key = PinReadBut();
+
+  retValue = ((key&1) && !(prevKey&1))   +
+             ((key&2) && !(prevKey&2))*2 +
+             ((key&4) && !(prevKey&4))*4;
+  prevKey = key;
+  return retValue;
+}
+
 uint8_t PinReadBut(void) {
   return digitalRead(KEY_2)*4 + digitalRead(KEY_1)*2 + digitalRead(KEY_0);
 }

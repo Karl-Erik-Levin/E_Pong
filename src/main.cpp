@@ -5,7 +5,7 @@
 #define WIDTH 128
 #define HEIGHT 64
 #define PADDLE_WIDTH 3
-#define PADDLE_HEIGHT 12
+#define PADDLE_HEIGHT 15
 
 //U8G2_SSD1306_128X64_NONAME_F_HW_I2C u8g2(U8G2_R0, /* reset=*/ 21, /* clock=*/ 18, /* data=*/ 17);     // Hectec WiFi_Kit_32 V3
   U8G2_SH1106_128X64_NONAME_F_HW_I2C u8g2(U8G2_R0, U8X8_PIN_NONE);                                      // For 1.30" display
@@ -13,36 +13,47 @@
 
 typedef struct {
   uint8_t score;   /* data */
-  uint8_t potValue;
   uint8_t padX, padY;
-} play;
+} gamePlayer;
 
-play player[2];
+typedef struct {
+  uint8_t radius;
+  uint8_t x, y;
+  int8_t  velX, velY;
+} gameBall;
 
+gamePlayer player[2];
+gameBall ball;
 
 void drawCenterLine();
 void drawPlayers();
+void drawBall();
+void trigBall(uint8_t key);
+void moveBall();
+uint8_t readPaddlePos(uint8_t pot);
+bool hitPaddle(uint8_t paddle, int8_t *angle);
 void initGame();
 void blink();
 
 void setup() {
   Serial.begin(115200);
-
   PinInit();
-  u8g2.begin();                             // start display
-  u8g2.setFont(u8g2_font_helvR10_tf);       // choose a suitable font
+
+  u8g2.begin();                                 // start display
+  u8g2.setFont(u8g2_font_mystery_quest_32_tr);
 
   u8g2.clearBuffer();
-  u8g2.drawStr(0, 15, (char *)"Hello World!");
+  u8g2.drawStr(30, 40, (char *)"Pong");
   u8g2.sendBuffer();
 
+  u8g2.setFont(u8g2_font_helvR10_tf);           // choose a suitable font
   delay(2000);
 
   initGame();
 }
 
 void loop() {
-  static uint32_t task1, task1cnt, task1Interval=400;
+  static uint32_t task1, task1cnt, task1Interval=50;
   static uint32_t task2, task2cnt, task2Interval=100;
   static uint32_t task3, task3cnt, task3Interval=1000;
 
@@ -52,13 +63,16 @@ void loop() {
   if (millis() > task1) {
     task1 = millis() + task1Interval;
 
-  player[0].potValue = map(PinReadPot(0), 0, 255, 0, HEIGHT-PADDLE_HEIGHT);
-  player[1].potValue = map(PinReadPot(1), 0, 255, 0, HEIGHT-PADDLE_HEIGHT);
-  
-  u8g2.clearBuffer();
-  drawCenterLine();
-  drawPlayers();
-  u8g2.sendBuffer();
+    player[0].padY = readPaddlePos(0);
+    player[1].padY = readPaddlePos(1);
+    trigBall(PinReadButFlank());
+    moveBall();
+    
+    u8g2.clearBuffer();
+    drawCenterLine();
+    drawPlayers();
+    drawBall();
+    u8g2.sendBuffer();
 }
 
   //------------------------//
@@ -111,23 +125,109 @@ void drawCenterLine() {
 void drawPlayers() {
   char text[10];
 
-  u8g2.drawVLine(player[0].padX, player[0].potValue, PADDLE_HEIGHT);
-  u8g2.drawVLine(player[1].padX, player[1].potValue, PADDLE_HEIGHT);
+  u8g2.drawVLine(player[0].padX, player[0].padY , PADDLE_HEIGHT);
+  u8g2.drawVLine(player[1].padX, player[1].padY , PADDLE_HEIGHT);
 
   sprintf(text, "%d", player[0].score);
-  u8g2.drawStr(32, 15, text);
+  u8g2.drawStr(25, 15, text);
   sprintf(text, "%d", player[1].score);
   u8g2.drawStr(96, 15, text);
 }
 
-void initGame() {
-  player[0].padX = 5;
-  player[0].padY = HEIGHT/2 - PADDLE_HEIGHT/2;
-  player[0].score = 1;
+void drawBall() {
+  u8g2.drawCircle(ball.x, ball.y, ball.radius);
+}
 
-  player[1].padX = WIDTH - 5;
+void trigBall(uint8_t key) {
+  if (key & 1) ball.velX += 1;
+  if (key & 2) ball.velY += 1;
+  if (key & 4) ball.velX -= 1;
+}
+
+void moveBall() {
+  int8_t angle;
+  ball.x += ball.velX;
+  ball.y += ball.velY;
+
+  if ((ball.y <= ball.radius) ||
+      (ball.y >= HEIGHT - ball.radius)) {
+
+    ball.velY *= -1;
+  }
+
+  if (hitPaddle(0, &angle) || hitPaddle(1, &angle)) {
+    ball.velX *= -1;
+    ball.velY = angle;
+  } else if ((ball.x <= ball.radius) ||
+           (ball.x >= WIDTH - ball.radius)) {
+    
+    if (ball.x <= ball.radius)
+      player[1].score++;
+    else
+      player[0].score++;
+
+    ball.x = WIDTH/2;                 // Reset ball postion
+    ball.y = HEIGHT/2;
+    ball.velX = ball.velY = 0;        // Stop the ball
+  }
+}
+
+bool hitPaddle(uint8_t paddle, int8_t *angle) {
+  bool retValue = false;
+  uint8_t playerPadY;
+
+  *angle = 0;
+  switch (paddle) {
+  case 0:
+    retValue = ((player[0].padX >= ball.x - ball.radius) && 
+                (player[0].padY <= ball.y) &&
+                (player[0].padY+PADDLE_HEIGHT >= ball.y));
+    playerPadY = player[0].padY;
+    break;
+  case 1:
+    retValue = ((player[1].padX <= ball.x + ball.radius) && 
+                (player[1].padY <= ball.y) &&
+                (player[1].padY+PADDLE_HEIGHT >= ball.y));
+    playerPadY = player[1].padY;
+    break;
+  }
+
+  if (retValue) {
+    if (ball.y == playerPadY)                      *angle = -2;
+    else if (ball.y == playerPadY+PADDLE_HEIGHT)   *angle =  2;
+    else if (ball.y <  playerPadY+PADDLE_HEIGHT/2) *angle = -1;
+    else if (ball.y > playerPadY+PADDLE_HEIGHT/2)  *angle =  1;
+  }
+
+  return retValue;
+}
+
+uint8_t readPaddlePos(uint8_t pot) {
+  const uint8_t paddleTop = HEIGHT - PADDLE_HEIGHT;
+  int16_t potValue;
+
+  potValue = map(PinReadPot(pot), 64, 192, 0, paddleTop);
+  if (potValue < 0)
+    potValue = 0;
+  if (potValue > paddleTop)
+    potValue = paddleTop;
+
+  return potValue;
+  }
+
+void initGame() {
+  player[0].padX = 3;
+  player[0].padY = HEIGHT/2 - PADDLE_HEIGHT/2;
+  player[0].score = 0;
+
+  player[1].padX = WIDTH - 3;
   player[1].padY = HEIGHT/2 - PADDLE_HEIGHT/2;
-  player[1].score = 5;
+  player[1].score = 0;
+
+  ball.radius = 2;
+  ball.x = WIDTH/2;
+  ball.y = HEIGHT/2;
+  ball.velX = ball.velY = 0;
 }
 
 void blink() {

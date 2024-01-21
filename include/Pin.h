@@ -6,6 +6,7 @@
 void PinInit(void);
 void PinStatusLed(uint8_t leds);
 uint8_t PinReadBut(void);
+uint8_t PinReadButFlank(void);
 uint8_t PinReadPot(uint8_t pot);
 int HallRead(void);
 
