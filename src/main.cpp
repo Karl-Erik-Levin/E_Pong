@@ -55,61 +55,64 @@ void setup() {
 void loop() {
   static uint32_t task1, task1cnt, task1Interval=50;
   static uint32_t task2, task2cnt, task2Interval=100;
-  static uint32_t task3, task3cnt, task3Interval=1000;
+  static uint32_t task3, task3cnt, task3Interval=0;           // Dont run this task
 
   //------------------------//
   //      T A S K   1       //
   //------------------------//
   if (millis() > task1) {
-    task1 = millis() + task1Interval;
+    if (task1Interval > 0) {
+      task1 = millis() + task1Interval;
 
-    player[0].padY = readPaddlePos(0);
-    player[1].padY = readPaddlePos(1);
-    trigBall(PinReadButFlank());
-    moveBall();
-    
-    u8g2.clearBuffer();
-    drawCenterLine();
-    drawPlayers();
-    drawBall();
-    u8g2.sendBuffer();
-}
+      player[0].padY = readPaddlePos(0);
+      player[1].padY = readPaddlePos(1);
+      trigBall(PinReadButFlank());
+      moveBall();
+      
+      u8g2.clearBuffer();
+      drawCenterLine();
+      drawPlayers();
+      drawBall();
+      u8g2.sendBuffer();
+    }
+  }
 
   //------------------------//
   //      T A S K   2       //
   //------------------------//
   if (millis() > task2) {
-    task2 = millis() + task2Interval;
+    if (task2Interval > 0) {
+      task2 = millis() + task2Interval;
 
-    uint8_t but = PinReadBut();
-    PinStatusLed(but);
-    blink();
-}
+      uint8_t but = PinReadBut();
+      PinStatusLed(but);
+      blink();
+    }
+  }
 
   //------------------------//
   //      T A S K   3       //
   //------------------------//
   if (millis() > task3) {
-    task3 = millis() + task3Interval;
-    static uint8_t hour=8, minute=48, second=12; 
+    if (task3Interval > 0) {
+      task3 = millis() + task3Interval;
 
-    // Every second
-    if (++second > 59) {
-      second = 0;
-      if (++minute > 59) {
-        minute = 0;
-        if (++hour > 23) {
-          hour = 0;
+      static uint8_t hour=0, minute=0, second=0;    
+      if (++second > 59) {        // Every second
+        second = 0;
+        if (++minute > 59) {
+          minute = 0;
+          if (++hour > 23) {
+            hour = 0;
+          }
         }
       }
-    }
-
-    // Every 5 minute
-    if (task3cnt < 300)
-      task3cnt++;
-    else {
-      task3cnt = 0;
-//      WifiTimeRead();         // Update time from Internet
+      if (task3cnt < 300)         // Every 5 minute
+        task3cnt++;
+      else {
+        task3cnt = 0;
+  //      WifiTimeRead();         // Update time from Internet
+      }
     }
   }
 }
@@ -146,29 +149,30 @@ void trigBall(uint8_t key) {
 
 void moveBall() {
   int8_t angle;
+
   ball.x += ball.velX;
   ball.y += ball.velY;
 
-  if ((ball.y <= ball.radius) ||
-      (ball.y >= HEIGHT - ball.radius)) {
+  if ((ball.y <= ball.radius) ||                              // Hit top
+      (ball.y >= HEIGHT - ball.radius)) {                     // Hit bottom
 
     ball.velY *= -1;
   }
 
-  if (hitPaddle(0, &angle) || hitPaddle(1, &angle)) {
+  if (hitPaddle(0, &angle) || hitPaddle(1, &angle)) {         // Hit paddle
     ball.velX *= -1;
     ball.velY = angle;
-  } else if ((ball.x <= ball.radius) ||
-           (ball.x >= WIDTH - ball.radius)) {
+  } else if ((ball.x <= ball.radius) ||                       // Hit left 
+             (ball.x >= WIDTH - ball.radius)) {               // Hit right
     
     if (ball.x <= ball.radius)
       player[1].score++;
     else
       player[0].score++;
 
-    ball.x = WIDTH/2;                 // Reset ball postion
+    ball.x = WIDTH/2;                                       // Reset ball postion
     ball.y = HEIGHT/2;
-    ball.velX = ball.velY = 0;        // Stop the ball
+    ball.velX = ball.velY = 0;                             // Stop the ball
   }
 }
 
